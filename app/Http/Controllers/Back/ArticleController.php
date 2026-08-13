@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Back;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ArticleRequest;
 use App\Http\Requests\UpdateArticleRequest;
+use App\Http\Services\ImageService;
 use App\Models\Article;
 use App\Models\Category;
 use Illuminate\Http\Request;
@@ -14,6 +15,12 @@ use Yajra\DataTables\Facades\DataTables;
 
 class ArticleController extends Controller
 {
+
+
+    public function __construct(private ImageService $imageService)
+    {
+       
+    }
     /**
      * Display a listing of the resource.
      */
@@ -63,15 +70,10 @@ class ArticleController extends Controller
     public function store(ArticleRequest $request)
     {
         $data = $request->validated();
-
-        $file = $request->file('img');
-        $fileName = uniqid().'.'.$file->getClientOriginalExtension();
-        
-        // Disimpan ke disk public
-        $file->storeAs('back', $fileName, 'public');
+        $uploadImage = $this->imageService->uploadImage($data);
 
         $data['user_id'] = auth()->user()->id;
-        $data['img'] = $fileName;
+        $data['img'] = $uploadImage;
         $data['slug'] = Str::slug($data['title']);
 
         Article::create($data);
@@ -103,52 +105,46 @@ class ArticleController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateArticleRequest $request, string $id)
-    {
-        $data = $request->validated();
-        $article = Article::findOrFail($id);
+   public function update(UpdateArticleRequest $request, string $id)
+{
+    $data = $request->validated();
+    $article = Article::findOrFail($id);
 
-        if ($request->hasFile('img')) {
-            $file = $request->file('img');
-            $fileName = uniqid().'.'.$file->getClientOriginalExtension();
-            
-            // Simpan foto baru ke disk public
-            $file->storeAs('back', $fileName, 'public');
-
-            // Hapus foto lama dari disk public
-            if ($request->oldImg && Storage::disk('public')->exists('back/' . $request->oldImg)) {
-                Storage::disk('public')->delete('back/' . $request->oldImg);
-            }
-
-            $data['img'] = $fileName;
-        } else {
-            $data['img'] = $request->oldImg;
-        }
-
-        $data['user_id'] = auth()->user()->id;
-        $data['slug'] = Str::slug($data['title']);
-
-        $article->update($data);
-
-        return redirect(url('article'))->with('success', 'Data article has been updated');
+    if ($request->hasFile('img')) {
+        // Gunakan ImageService agar gambar baru di-resize & terbuat thumbnail-nya
+        // Sekaligus menghapus foto lama + thumbnail lamanya
+        $data['img'] = $this->imageService->uploadImage($data, $request->oldImg);
+    } else {
+        $data['img'] = $request->oldImg;
     }
+
+    $data['user_id'] = auth()->user()->id;
+    $data['slug'] = Str::slug($data['title']);
+
+    $article->update($data);
+
+    return redirect(url('article'))->with('success', 'Data article has been updated');
+}
 
     /**
      * Remove the specified resource from storage.
      */
     public function destroy(string $id)
-    {
-        $data = Article::findOrFail($id);
+{
+    $data = Article::findOrFail($id);
 
-        // Hapus file dari disk public
-        if ($data->img && Storage::disk('public')->exists('back/' . $data->img)) {
-            Storage::disk('public')->delete('back/' . $data->img);
-        }
-
-        $data->delete();
-
-        return response()->json([
-            'message' => 'Data article has been deleted'
+    // Hapus file utama DAN thumbnail dari disk public
+    if ($data->img) {
+        Storage::disk('public')->delete([
+            'back/' . $data->img,
+            'back/thumbnail/' . $data->img
         ]);
     }
+
+    $data->delete();
+
+    return response()->json([
+        'message' => 'Data article has been deleted'
+    ]);
+}
 }

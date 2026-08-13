@@ -41,7 +41,7 @@
                                 <div class="card mb-3">
                                     <div class="row">
                                         <div class="col-md-3">
-                                            <img src="{{asset('storage/back/'.$item->img) }}" alt="{{$item->title}}" class="img-fluid">
+                                            <img src="{{asset('storage/back/thumbnail/'.$item->img) }}" alt="{{$item->title}}" class="img-fluid">
                                         </div>
                                         <div class="col-md-8">
                                            <div class="card-body">
